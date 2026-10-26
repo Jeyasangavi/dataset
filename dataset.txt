@@ -2050,4 +2050,47 @@ Three things to remember during the exam:
 
 The VMware manual uses the same overall pattern: clone and configure virtual machines, install Apache, configure HAProxy, migrate services for consolidation, and use VM copies and synchronization for fault tolerance.&#x20;
 
-LabManual_Sample_seniors.pdf
+croptab---task scheduling
+Step 2: Create the scheduling script
+Run:
+nano task.sh
+
+
+Paste this code:
+#!/bin/bash
+
+while true
+do
+    echo "Process 1 running: $(date)"
+    sleep 3
+done &
+P1=$!
+
+while true
+do
+    echo "Process 2 running: $(date)"
+    sleep 15
+done &
+P2=$!
+
+wait
+
+
+Save with Ctrl + O → Enter → Ctrl + X.
+Step 3: Make the script executable
+chmod +x task.sh
+
+
+Step 4: Schedule it using cron
+Open the cron editor:
+crontab -e
+
+
+If prompted, choose nano. Add this line at the bottom:
+* * * * * /bin/bash /home/USERNAME/task.sh >> /home/USERNAME/task.log 2>&1
+
+
+Replace USERNAME with your actual Ubuntu username. To find it, run whoami.
+
+Save and exit.
+

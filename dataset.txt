@@ -1130,3 +1130,162 @@ Use the same HAProxy procedure from Exercise 5:
 6. Optional advanced scheduling — nice
 nice -n 10 ./script.sh
 This runs the program with a lower CPU scheduling priority than a normal-priority process in typical Linux configurations. It does not schedule the program to run at a particular time.
+
+
+main server consolidation:
+Step 1: Open VMware Workstation
+1. Open the college Windows computer and log in.
+2. Open VMware Workstation Pro 17.
+3. Find the existing Ubuntu VM in the left panel.
+4. If you have only one Ubuntu VM, right-click it → Manage → Clone → Create a full clone.
+5. Name the two VMs:
+   - Server1 — target/consolidated server
+   - Server2 — source server
+6. Power on both VMs.
+If two Ubuntu VMs are already available in the lab, use those instead.
+Step 2: Check the VM resource allocations
+This step is done in VMware Workstation, not Ubuntu Terminal.
+1. Select Server1.
+2. Click Edit virtual machine settings.
+3. Note the allocated Memory and Processors.
+4. Repeat for Server2.
+5. Select a target VM that has enough resources for the combined workload.
+Avoid increasing the memory or CPU beyond what the physical lab computer can support. The manual asks you to adjust the resources where necessary. LabManual_Sample_seniors.pdf
+
+Step 3: Open Terminal in both VMs
+Click inside the Ubuntu desktop of each VM and press Ctrl + Alt + T.
+
+Run this command in Server1:
+hostname -I
+
+
+Write down its IP address.
+
+Run the same command in Server2:
+hostname -I
+
+
+Write down its IP address too.
+
+Make sure the two VMs can communicate on their configured network.
+Step 4: Install Apache on both VMs
+First, in Server1 Terminal, run:
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+
+
+Set its webpage:
+echo '<h1>Consolidated Server - Server1</h1>' | sudo tee /var/www/html/index.html
+
+
+Now, in Server2 Terminal, run:
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+
+
+Set a different webpage so you can identify it:
+echo '<h1>Original Server - Server2</h1>' | sudo tee /var/www/html/index.html
+
+
+Check that Apache is running on each VM:
+sudo systemctl status apache2
+
+
+Look for active (running). Press q to exit.
+Step 5: Migrate the service files to Server1
+For this practical, we'll demonstrate migration by copying Server2's webpage to Server1. In a real system, you would also migrate any required application files, configurations, and data.
+
+First, on Server1 Terminal, install and enable SSH:
+sudo apt install openssh-server -y
+sudo systemctl enable --now ssh
+
+
+On Server2 Terminal, copy its webpage to Server1's temporary directory:
+scp /var/www/html/index.html USER@SERVER1_IP:/tmp/server2-index.html
+
+
+Replace:
+- USER with the Ubuntu username on Server1.
+- SERVER1_IP with Server1's actual IP address.
+Enter the password if prompted.
+
+Next, go to Server1 Terminal and move the copied webpage into Apache's web directory:
+sudo cp /tmp/server2-index.html /var/www/html/
+
+
+For this demonstration, the migrated file is now available on Server1. You can retain Server1's existing index.html as the main page, or use the copied page as the main page:
+sudo cp /var/www/html/server2-index.html /var/www/html/index.html
+
+
+The second command replaces Server1's current homepage, so only run it if that is what you intend.
+Step 6: Verify the migrated service
+On Server1 Terminal, run:
+sudo systemctl is-active apache2
+
+
+Expected output:
+active
+
+
+Now test the web service locally:
+curl http://localhost
+
+
+You should see the HTML content of the page currently configured on Server1.
+
+You can also open Firefox on a machine that can reach Server1 and enter:
+http://SERVER1_IP
+
+
+Replace SERVER1_IP with its actual IP address.
+
+Do not stop Server2 until you have confirmed that the required service and files are available on Server1.
+Step 7: Stop the redundant server
+Now return to Server2 Terminal and stop Apache:
+sudo systemctl stop apache2
+
+
+Check the result:
+sudo systemctl is-active apache2
+
+
+Expected output:
+inactive
+
+
+This demonstrates stopping the duplicate service after moving the required workload. If Server2 has other required applications, migrate and verify those before shutting down the VM.
+Step 8: Power off Server2
+After confirming Server1 is working:
+
+Option A — From Ubuntu Terminal on Server2:
+sudo poweroff
+
+
+Option B — From VMware Workstation:
+
+Select Server2 and use the normal guest shutdown option, if available.
+
+Do not delete the VM unless your instructor explicitly requires it. Powering it off is sufficient for the practical demonstration.
+Step 9: Monitor resource utilization
+On Server1 Terminal, run:
+top
+
+Look at the CPU and memory usage. Press q to exit.
+
+To see memory usage more clearly, run:
+free -h
+
+To check disk space, run:
+df -h
+
+The manual asks you to verify that the consolidated VM can handle the workload without performance degradation. LabManual_Sample_seniors.pdf
+
+Step 10: Final verification
+Make sure the following are true:
+- Server1 is powered on.
+- Apache is active on Server1.
+- The migrated webpage is available on Server1.
+- Server2 is powered off only after verifying the migration.
+- You have checked CPU, memory, and disk usage.

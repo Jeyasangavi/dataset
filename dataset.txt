@@ -1289,3 +1289,765 @@ Make sure the following are true:
 - The migrated webpage is available on Server1.
 - Server2 is powered off only after verifying the migration.
 - You have checked CPU, memory, and disk usage.
+
+
+
+
+IT A END SEM VM
+Bro, I'll prepare all 7 Cloud and Distributed Computing end-semester VMware questions as practical, step-by-step implementations, following your senior's lab manual. I'll keep the commands beginner-friendly, tell you exactly which VM or terminal to use, and show how to verify each result.&#x20;
+
+LabManual_Sample_seniors.pdf
+
+
+
+The good news: you don't need to learn seven completely different implementations. Most of them reuse the same three things:
+
+- Ubuntu Virtual Machines (VMs): the computers you create in VMware Workstation.
+- Apache: the web server that hosts each portal.
+- HAProxy: the load balancer that distributes incoming requests across servers.
+
+## Before starting: common setup for the VMware questions
+
+Use this setup for Questions 1, 2, 4, 5, 6 and 7. Question 3 uses a different workflow.
+
+### Step 1: Create the VMs
+
+1. Open VMware Workstation.
+2. Right-click your existing Ubuntu VM.
+3. Select Manage → Clone.
+4. Choose Create a full clone.
+5. Create these VMs, giving them descriptive names:
+
+| VM name | Purpose                                            |
+| ------- | -------------------------------------------------- |
+| Server1 | Web server 1                                       |
+| Server2 | Web server 2                                       |
+| Server3 | Load balancer or backup, depending on the question |
+
+For Question 1 or 6, use Server1 and Server2 as web servers and Server3 as the load balancer. For fault tolerance, Server3 can instead be a backup VM if you aren't required to demonstrate both features simultaneously.
+
+6. Power on the VMs using VMware Workstation's Power On button.
+7. Make sure their network adapters use compatible network settings, such as the same NAT network.
+
+### Step 2: Find each VM's IP address
+
+Open the Ubuntu Terminal inside each VM using `Ctrl + Alt + T`.
+
+Run:
+
+```
+hostname -I
+```
+
+Write down each VM's IP address. For example, your actual addresses might look like this:
+
+```
+Server1: 192.168.119.129
+Server2: 192.168.119.130
+Server3: 192.168.119.131
+```
+
+These are examples only. Always use the actual IP addresses displayed by your VMs.
+
+### Step 3: Install Apache on Server1 and Server2
+
+Run these commands in the Ubuntu Terminal of both Server1 and Server2:
+
+```
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+sudo systemctl status apache2
+```
+
+Look for `active (running)`. Press `q` to exit the status screen.
+
+Give Server1 a unique page:
+
+```
+echo '<h1>Hello from Server1</h1>' | sudo tee /var/www/html/index.html
+```
+
+Give Server2 a different page:
+
+```
+echo '<h1>Hello from Server2</h1>' | sudo tee /var/www/html/index.html
+```
+
+Test each server from its own terminal:
+
+```
+curl http://localhost
+```
+
+You should see its corresponding HTML message.
+
+## 1. Load Balancing and Fault Tolerance
+
+Aim: Distribute requests across multiple servers and maintain service availability if one server fails.
+
+### Part A — Configure the load balancer
+
+Use Server1 and Server2 as web servers and Server3 as the load balancer.
+
+On Server3 — Ubuntu Terminal:
+
+```
+sudo apt update
+sudo apt install haproxy -y
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+Go to the end of the configuration file and add this configuration. Replace the IP addresses with your actual Server1 and Server2 addresses.
+
+```
+frontend web_front
+    bind *:80
+    default_backend web_back
+
+backend web_back
+    balance roundrobin
+    server server1 192.168.119.129:80 check
+    server server2 192.168.119.130:80 check
+```
+
+Here, `roundrobin` means requests are distributed between the servers in turn.
+
+Save the file: press `Ctrl + O`, press `Enter`, then `Ctrl + X`.
+
+If the existing HAProxy configuration already has a frontend binding to port 80, modify that existing configuration rather than creating a second conflicting listener.
+
+Validate and start HAProxy:
+
+```
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl enable --now haproxy
+sudo systemctl restart haproxy
+sudo systemctl status haproxy
+```
+
+Look for `active (running)` and press `q`.
+
+### Part B — Test load balancing
+
+On the computer or VM acting as the client, open a browser and visit:
+
+```
+http://SERVER3_IP
+```
+
+Alternatively, from an Ubuntu terminal, run:
+
+```
+curl http://SERVER3_IP
+```
+
+Replace `SERVER3_IP` with Server3's actual address.
+
+Repeat the request several times. The responses should alternate between the Server1 and Server2 pages, provided both are healthy and both have distinct page content.
+
+### Part C — Demonstrate fault tolerance
+
+For a simple manual failover demonstration:
+
+1. Keep Server2 available as the backup.
+2. Copy the website files from Server1 to Server2.
+3. Test the website directly on Server2.
+4. Use VMware Workstation to select Server1 and click Power Off.
+5. Open `http://SERVER2_IP` in the browser to demonstrate that the backup server still serves the website.
+
+To synchronize the website files, first install SSH and `rsync` on the VMs. On Server2, run:
+
+```
+sudo apt update
+sudo apt install openssh-server rsync -y
+sudo systemctl enable --now ssh
+```
+
+On Server1, run the following, replacing `USER` with Server2's Ubuntu username and `SERVER2_IP` with its actual address:
+
+```
+sudo apt install rsync openssh-client -y
+sudo rsync -av /var/www/html/ USER@SERVER2_IP:/tmp/backup-html/
+```
+
+Then, on Server2, copy the synchronized files into Apache's website folder:
+
+```
+sudo cp /tmp/backup-html/index.html /var/www/html/index.html
+```
+
+This demonstrates backup and manual recovery. For a real production setup, automatic failover would need additional configuration; powering off Server1 alone does not automatically make Server2 take over the same IP address.
+
+Expected result: Requests are distributed across healthy web servers, and the backup server can serve the website if the primary is unavailable.
+
+## 2. School Fee Portal Application — Load Balancing and Fault Tolerance
+
+This is Question 1 with a school-fee website instead of a generic website. The infrastructure and commands are the same; only the webpage content changes.
+
+### Step 1 — Prepare the web servers
+
+Use Server1, Server2 and Server3 as described in the common setup.
+
+On Server1:
+
+```
+echo '<h1>School Fee Portal - Server1</h1><p>Fee payment and student details</p>' | sudo tee /var/www/html/index.html
+```
+
+On Server2:
+
+```
+echo '<h1>School Fee Portal - Server2</h1><p>Fee payment and student details</p>' | sudo tee /var/www/html/index.html
+```
+
+Make sure Apache is running on both:
+
+```
+sudo systemctl enable --now apache2
+```
+
+### Step 2 — Configure HAProxy
+
+On Server3, open the configuration file:
+
+```
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+Add the following, using your actual web server IP addresses:
+
+```
+frontend fee_front
+    bind *:80
+    default_backend fee_back
+
+backend fee_back
+    balance roundrobin
+    server fee1 192.168.119.129:80 check
+    server fee2 192.168.119.130:80 check
+```
+
+Save the file and run:
+
+```
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+sudo systemctl enable haproxy
+```
+
+As in Question 1, don't create another conflicting port-80 listener if one already exists.
+
+### Step 3 — Test the School Fee Portal
+
+Open a browser and enter:
+
+```
+http://SERVER3_IP
+```
+
+You should see the School Fee Portal webpage. Repeat the request to demonstrate distribution between Server1 and Server2.
+
+### Step 4 — Demonstrate fault tolerance
+
+Synchronize the fee portal's webpage from Server1 to Server2 using the `rsync` procedure from Question 1. Verify Server2 works directly, then power off Server1 using VMware Workstation's Power Off button and open `http://SERVER2_IP`.
+
+Expected result: The School Fee Portal is hosted on two servers, requests are distributed through HAProxy, and the backup website remains accessible after the primary VM is powered off.
+
+> For this lab, the fee portal is a simulated website. A real fee payment system would also require its application logic, database, and transaction data to be replicated safely; copying only the HTML file is not enough for real payment failover.
+
+## 3. Physical Education Server Consolidation (Logical Demonstration)
+
+Aim: Consolidate workloads from multiple VMs onto one target VM to simplify management and reduce the number of running virtual machines.
+
+For this question, you do not need a load balancer. The main task is migrating a service from a source VM to a target VM, verifying it, and then powering off the source VM.
+
+### Step 1 — Identify the VMs
+
+In VMware Workstation, use two Ubuntu VMs:
+
+- Server1: target/consolidated server
+- Server2: original/source server
+
+Open Edit virtual machine settings for each VM and inspect its memory and processor allocations. Choose Server1 as the target if it has enough resources.
+
+### Step 2 — Install a service on each VM
+
+In both Ubuntu terminals, run:
+
+```
+sudo apt update
+sudo apt install apache2 openssh-server -y
+sudo systemctl enable --now apache2
+sudo systemctl enable --now ssh
+```
+
+On Server1:
+
+```
+echo '<h1>Physical Education Portal - Consolidated Server</h1>' | sudo tee /var/www/html/index.html
+```
+
+On Server2:
+
+```
+echo '<h1>Physical Education Portal - Original Server</h1>' | sudo tee /var/www/html/index.html
+```
+
+Find the target VM's IP on Server1:
+
+```
+hostname -I
+```
+
+### Step 3 — Migrate the source webpage
+
+On Server2, run the following command, replacing the username and IP address with Server1's details:
+
+```
+scp /var/www/html/index.html USER@SERVER1_IP:/tmp/server2-index.html
+```
+
+On Server1, copy the migrated file into Apache's website folder:
+
+```
+sudo cp /tmp/server2-index.html /var/www/html/
+```
+
+If you want the migrated page to become the target server's homepage, run:
+
+```
+sudo cp /var/www/html/server2-index.html /var/www/html/index.html
+```
+
+This last command replaces Server1's existing homepage, so only run it if that is the intended result.
+
+### Step 4 — Verify the consolidated server
+
+On Server1:
+
+```
+sudo systemctl is-active apache2
+curl http://localhost
+```
+
+You should see `active` and the webpage content. You can also open `http://SERVER1_IP` in a browser.
+
+### Step 5 — Power off the source VM
+
+Once the service works on Server1:
+
+1. Return to VMware Workstation.
+2. Select Server2.
+3. Click Power Off.
+4. Leave Server1 running.
+5. Recheck the webpage at `http://SERVER1_IP`.
+
+### Step 6 — Monitor the target VM
+
+On Server1's Ubuntu Terminal:
+
+```
+top
+```
+
+Press `q` to exit. You can also run:
+
+```
+free -h
+df -h
+```
+
+These show the target VM's memory and storage usage. The lab demonstrates logical consolidation; these commands alone do not prove that physical host resource consumption has decreased.
+
+Expected result: The required webpage is migrated and running on Server1, the original Server2 VM is powered off, and the target VM's resource usage is inspected.
+
+Memory trick: Check resources → Choose target → Migrate → Verify → Power off source → Monitor.
+
+## 4. School Exam Portal — Load Balancing
+
+Aim: Distribute incoming School Exam Portal requests across multiple web servers.
+
+This question requires load balancing only; fault tolerance is not the main requirement.
+
+### Step 1 — Prepare Server1 and Server2
+
+Install Apache on both VMs if you have not already completed the common setup.
+
+On Server1:
+
+```
+echo '<h1>School Exam Portal - Server1</h1><p>Login and examination services</p>' | sudo tee /var/www/html/index.html
+```
+
+On Server2:
+
+```
+echo '<h1>School Exam Portal - Server2</h1><p>Login and examination services</p>' | sudo tee /var/www/html/index.html
+```
+
+Find both IP addresses:
+
+```
+hostname -I
+```
+
+### Step 2 — Configure Server3 as the load balancer
+
+In Server3's Ubuntu Terminal:
+
+```
+sudo apt update
+sudo apt install haproxy -y
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+Add the configuration below, replacing the example addresses:
+
+```
+frontend exam_front
+    bind *:80
+    default_backend exam_back
+
+backend exam_back
+    balance roundrobin
+    server exam1 192.168.119.129:80 check
+    server exam2 192.168.119.130:80 check
+```
+
+Save the file, validate the configuration, and restart the service:
+
+```
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl enable haproxy
+sudo systemctl restart haproxy
+sudo systemctl status haproxy
+```
+
+Look for `active (running)`.
+
+### Step 3 — Test the School Exam Portal
+
+Open a browser and enter:
+
+```
+http://SERVER3_IP
+```
+
+Refresh the page or run this command several times from a terminal:
+
+```
+curl http://SERVER3_IP
+```
+
+The displayed server name should alternate between Server1 and Server2 when both servers are healthy and their pages differ.
+
+Expected result: The School Exam Portal is accessible through one load-balancer IP, and requests are distributed across both web servers.
+
+## 5. Create Multiple VMs and Make Them Communicate Using IP Addresses
+
+Aim: Create multiple VMs and establish communication between them using their Internet Protocol (IP) addresses.
+
+This question does not require HAProxy. You only need networking and a working communication test.
+
+### Step 1 — Create two VMs
+
+In VMware Workstation:
+
+1. Right-click your existing Ubuntu VM.
+2. Select Manage → Clone → Create a full clone.
+3. Name the VMs Server1 and Server2.
+4. Power on both.
+5. Ensure their network adapters use compatible network settings, such as the same NAT network.
+
+### Step 2 — Find their IP addresses
+
+On Server1:
+
+```
+hostname -I
+```
+
+On Server2:
+
+```
+hostname -I
+```
+
+The VMs should have different IP addresses.
+
+### Step 3 — Test communication with `ping`
+
+From Server1's Ubuntu Terminal, run:
+
+```
+ping -c 4 SERVER2_IP
+```
+
+Replace `SERVER2_IP` with the actual address shown on Server2.
+
+If communication is successful, you should see replies from Server2 and packet statistics.
+
+If `ping` fails, check the network adapter settings and IP addresses. Some firewalls block ping, so a failed ping alone does not always mean all network communication is broken.
+
+### Step 4 — Demonstrate actual application communication
+
+To make the result clearer, install Apache on Server2:
+
+```
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+```
+
+Give it a unique page:
+
+```
+echo '<h1>Message received from Server2</h1>' | sudo tee /var/www/html/index.html
+```
+
+On Server1, test the connection:
+
+```
+curl http://SERVER2_IP
+```
+
+You should see:
+
+```
+<h1>Message received from Server2</h1>
+```
+
+You can also open `http://SERVER2_IP` in Server1's browser.
+
+Expected result: Server1 successfully accesses the web service hosted on Server2 using its IP address.
+
+Memory trick: Clone → Power on → Find IPs → Ping → Test with curl.
+
+## 6. Online Examination Portal — Load Balancing and Fault Tolerance
+
+This is similar to Question 2, but the webpage represents an online examination system. Use two web servers and a third VM as the load balancer.
+
+### Step 1 — Prepare the online examination servers
+
+On Server1:
+
+```
+echo '<h1>Online Examination Portal - Server1</h1><p>Question and login service</p>' | sudo tee /var/www/html/index.html
+```
+
+On Server2:
+
+```
+echo '<h1>Online Examination Portal - Server2</h1><p>Question and login service</p>' | sudo tee /var/www/html/index.html
+```
+
+Ensure Apache is running on both:
+
+```
+sudo systemctl enable --now apache2
+```
+
+### Step 2 — Configure load balancing
+
+On Server3:
+
+```
+sudo apt update
+sudo apt install haproxy -y
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+Add:
+
+```
+frontend online_exam_front
+    bind *:80
+    default_backend online_exam_back
+
+backend online_exam_back
+    balance roundrobin
+    server exam1 192.168.119.129:80 check
+    server exam2 192.168.119.130:80 check
+```
+
+Use your real server IP addresses. Save and run:
+
+```
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl enable haproxy
+sudo systemctl restart haproxy
+```
+
+Open `http://SERVER3_IP` and verify that requests reach both web servers.
+
+### Step 3 — Prepare a backup for fault tolerance
+
+Synchronize the website files from Server1 to Server2 using the `rsync` commands from Question 1.
+
+Verify that the backup website works directly:
+
+```
+curl http://localhost
+```
+
+Run this on Server2's terminal.
+
+### Step 4 — Simulate a server failure
+
+1. Power off Server1 using VMware Workstation's Power Off button.
+2. Check that Server2 still serves the website:
+   ```
+   curl http://localhost
+   ```
+3. Open `http://SERVER2_IP` in a browser.
+
+Important: HAProxy's health checks should detect a failed backend and stop sending requests to it. If you power off Server1, the load balancer should continue using Server2 while it is healthy. If you power off the load balancer itself, the website will not remain available through its IP unless you have configured a separate load-balancer failover mechanism.
+
+Expected result: The Online Examination Portal distributes requests across two web servers and continues to be served by Server2 after Server1 is unavailable.
+
+> As with the fee portal, this is a web-server demonstration. A real online examination system must also protect and synchronize exam sessions, answers, and database transactions; synchronizing only the webpage is not sufficient for full application fault tolerance.
+
+## 7. Client-Server Communication and Load Balancer
+
+Aim: Demonstrate how a client communicates with a server through a load balancer, which forwards requests to one of multiple backend servers.
+
+For this practical, the browser or terminal acts as the client, Server1 and Server2 host the website, and Server3 runs HAProxy.
+
+### Step 1 — Configure the backend servers
+
+On Server1:
+
+```
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+echo '<h1>Response from Server1</h1>' | sudo tee /var/www/html/index.html
+```
+
+On Server2:
+
+```
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+echo '<h1>Response from Server2</h1>' | sudo tee /var/www/html/index.html
+```
+
+Find their IP addresses using `hostname -I`.
+
+### Step 2 — Configure the load balancer
+
+On Server3:
+
+```
+sudo apt update
+sudo apt install haproxy -y
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+Add this configuration using the correct IP addresses:
+
+```
+frontend client_front
+    bind *:80
+    default_backend server_back
+
+backend server_back
+    balance roundrobin
+    server server1 192.168.119.129:80 check
+    server server2 192.168.119.130:80 check
+```
+
+Save and run:
+
+```
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl enable haproxy
+sudo systemctl restart haproxy
+sudo systemctl status haproxy
+```
+
+### Step 3 — Make the client communicate
+
+From the client VM's Ubuntu Terminal, run:
+
+```
+curl http://SERVER3_IP
+```
+
+Replace `SERVER3_IP` with the load balancer's IP address.
+
+Run the command several times. The response should alternate between Server1 and Server2.
+
+You can also open a browser and visit `http://SERVER3_IP`.
+
+Expected result: The client sends a request to the load balancer, HAProxy forwards it to a backend web server, and the response is returned to the client.
+
+The communication flow is:
+
+Client
+
+Browser or curl command
+
+Server3 — HAProxy
+
+Load balancer
+
+Server1
+
+Apache
+
+Server2
+
+Apache
+
+## Last-minute revision table
+
+| Question                            | What you must demonstrate                            |
+| ----------------------------------- | ---------------------------------------------------- |
+| 1. Load balancing + fault tolerance | HAProxy, two Apache servers, backup and failure test |
+| 2. School Fee Portal                | Fee portal pages + load balancing + backup test      |
+| 3. Server consolidation             | Migrate service, verify target, power off source VM  |
+| 4. School Exam Portal               | Exam portal pages + HAProxy                          |
+| 5. Multiple VMs communicating       | Different IP addresses, `ping`, `curl`               |
+| 6. Online Examination Portal        | Examination pages + HAProxy + backup test            |
+| 7. Client-server + load balancer    | Client request → HAProxy → backend response          |
+
+### The commands worth memorizing
+
+```
+# Find a VM's IP address
+hostname -I
+
+# Install and start Apache
+sudo apt update
+sudo apt install apache2 -y
+sudo systemctl enable --now apache2
+
+# Install HAProxy
+sudo apt install haproxy -y
+
+# Check HAProxy configuration and restart
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+
+# Test communication
+ping -c 4 SERVER2_IP
+curl http://SERVER2_IP
+
+# Check resources
+top
+free -h
+df -h
+```
+
+Three things to remember during the exam:
+
+1. Replace every example IP with the actual IP address of your VM.
+2. For Questions 1, 2 and 6, demonstrate both load balancing and a backup/failure test. For Question 4, load balancing is enough.
+3. For server consolidation, migrate and verify the service before using VMware Workstation's Power Off button on the source VM. Don't choose Remove or delete the VM unless your instructor specifically asks.
+
+The VMware manual uses the same overall pattern: clone and configure virtual machines, install Apache, configure HAProxy, migrate services for consolidation, and use VM copies and synchronization for fault tolerance.&#x20;
+
+LabManual_Sample_seniors.pdf

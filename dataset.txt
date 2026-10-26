@@ -43,6 +43,37 @@ print(s.recv(1024).decode())
 s.close()
 --------------
 Token Ring
+
+import multiprocessing
+import time
+
+def process(pid, receive, send):
+    for i in range(2):
+        token = receive.get()
+
+        print("Process", pid, "received token")
+        print("Process", pid, "entering critical section")
+        time.sleep(1)
+        print("Process", pid, "leaving critical section")
+
+        send.put(token)
+
+if __name__ == "__main__":
+    q = [multiprocessing.Queue() for i in range(3)]
+    q[0].put("TOKEN")
+
+    p = []
+    for i in range(3):
+        x = multiprocessing.Process(
+            target=process,
+            args=(i + 1, q[i], q[(i + 1) % 3])
+        )
+        p.append(x)
+        x.start()
+
+    for x in p:
+        x.join()
+
 --------------
 cel to Fah
 
